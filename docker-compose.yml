@@ -1,0 +1,67 @@
+version: '3.9'
+services:
+  homeassistant:
+    container_name: home-assistant
+    image: homeassistant/home-assistant:stable
+    volumes:
+      - /hass/config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /dev/serial/by-id:/dev/serial/by-id
+    devices:
+      - /dev/serial/by-id/usb-Itead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_V2_56c8b612e573ef11a222df1e313510fd-if00-port0:/dev/ttyUSB0
+    environment:
+      - TZ=America/Chicago
+    restart: unless-stopped
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+
+  music-assistant-server:
+    image: ghcr.io/music-assistant/server:latest # <<< Desired release version here (or use beta to get the latest beta version)
+    container_name: music-assistant-server
+    restart: unless-stopped
+    # Network mode must be set to host for MA to discover and stream to players (see networking note below)
+    network_mode: host
+    volumes:
+      - /home/docker/music-assistant-server/data:/data/
+      # Optional: expose local music to MA by bind-mounting it read-only
+      #- /path/to/your/music:/media:ro
+    environment:
+      # Provide logging level as environment variable.
+      # default=info, possible=(critical, error, warning, info, debug)
+      - LOG_LEVEL=info
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: jellyfin
+    environment:
+      - TS_AUTH_KEY=<ts-auth-key>
+      - TS_SERVE_CONFIG=/config/jellyfin.json
+      - TS_STATE_DIR=/state
+      - "TS_EXTRA_ARGS=--advertise-tags=tag:minipc"
+      - TS_TAILSCALED_EXTRA_ARGS=--tun=tailscale1
+    volumes:
+      - /home/ubuntu/tailscale/config:/config
+      - /home/ubuntu/tailscale/state:/state
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    restart: unless-stopped
+    network_mode: host
+
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    user: 1000:1000
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    environment:
+      TZ: America/Chicago
+    volumes:
+      - /home/ubuntu/jellyfin/config:/config
+      - /home/ubuntu/jellyfin/media:/mnt
+    restart: on-failure:3
+

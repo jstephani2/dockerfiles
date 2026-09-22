@@ -1,0 +1,40 @@
+services:
+  tailscale-nextcloud:
+    image: tailscale/tailscale:latest
+    container_name: tailscale-nextcloud
+    hostname: nextcloud
+    environment:
+      - TS_AUTH_KEY=<auth-key>
+      - TS_SERVE_CONFIG=/config/nextcloud.json
+      - TS_STATE_DIR=/state
+      - "TS_EXTRA_ARGS=--advertise-tags=tag:minipc"
+      - TS_TAILSCALED_EXTRA_ARGS=--tun=tailscale2
+    volumes:
+      - /home/ubuntu/tailscale/config:/config
+      - /home/ubuntu/tailscale/state-nextcloud:/state
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    restart: unless-stopped
+    network_mode: host
+  nextcloud-aio-mastercontainer:
+    image: ghcr.io/nextcloud-releases/all-in-one:latest
+    init: true
+    restart: always # This makes sure that the container starts always together with the host OS. See https://docs.docker.com/reference/compose-file/services/#restart
+    container_name: nextcloud-aio-mastercontainer # This line is not allowed to be changed as otherwise AIO will not work correctly
+    volumes:
+      - nextcloud_aio_mastercontainer:/mnt/docker-aio-config # This line is not allowed to be changed as otherwise the built-in backup solution will not work
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+     - "8080:8080"
+     - "8443:8443"
+    environment: 
+      APACHE_PORT: 11000 
+      APACHE_IP_BINDING: 127.0.0.1 # Should be set when running behind a web server or reverse proxy (like Apache, Nginx, Caddy, Cloudflare Tunnel and else) that is 
+      SKIP_DOMAIN_VALIDATION: true
+
+volumes: # If you want to store the data on a different drive, see https://github.com/nextcloud/all-in-one#how-to-store-the-filesinstallation-on-a-separate-drive
+  nextcloud_aio_mastercontainer:
+    name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
+
